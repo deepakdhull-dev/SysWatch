@@ -1,0 +1,75 @@
+[project]
+name = "syswatch"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependecies = [
+    "grpcio>=1.66",
+    "grpcio-tools>=1.66",
+
+    "protobuf>=5.28",
+
+    "asyncpg>=0.29",
+
+    "psutil>=6.0",
+
+    "fastapi>=0.115",
+    "uviconr[standard]>=0.32",
+
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+
+    "structlog>=24.4",
+
+    "prometheus-client>=0.21",
+
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp>=1.28",
+    "opentelemetry-instumentation-fastapi>=0.49b0",
+    "opentelemetry-instumentation-grpc>=0.49b0",
+
+    "python-jose[cryptography]>=3.3",
+
+    "alembic>=1.14",
+    "sqlalchemy[asyncio]>=2.0",
+
+    "slowapi>=0.1.9",
+]
+
+[project.optional-dependecies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "testcontainers[postgres]>=4.8",
+    "hypothesis>=6.115",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+adopts = "--cov=syswatch --cov-report=term-missing"
+
+tool.ruff]
+target-version = "py313"
+line-length = 100
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "TCH",
+]
+
+[tool.mypy]
+python_version = "3.13"
+
+strict = true
+
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
