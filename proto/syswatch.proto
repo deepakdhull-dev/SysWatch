@@ -1,0 +1,80 @@
+syntax="proto3";
+package syswatch_common;
+
+message HostInfo {
+    string hostname=1;
+    string kernel=2;
+    string cpu_model=3;
+    string os_name=4;
+    int32 cpu_cores=5;
+    int32 cpu_threads=6;
+    string agent_id=7;
+}
+
+
+message NetworkInterface {
+    string interface_name=1;
+    int64 bytes_in=2;
+    int64 bytes_out=3;
+    int64 packets_in=4;
+    int64 packets_out=5;
+    int64 errors_in=6;
+    int64 errors_out=7;
+}
+
+message ServiceStatus {
+    string name =1;
+    bool active =2;
+}
+
+
+message DiskUsage{
+    string mount_point=1;
+    float pct=2;
+    float used=3;
+    float total=4;
+}
+
+message MetricFrame{
+    string agent_id=1;
+    string frame_id=2;
+    int64 timestamp=3;
+
+    float cpu_pct=4;
+
+    float ram_pct=5;
+    float ram_used=6;
+    float ram_total=7;
+    float swap_pct=8;
+    float swap_used=9;
+    float swap_total=10;
+
+    float load_1m=11;
+    float load_5m=12;
+    float load_15m=13;
+
+    repeated NetworkInterface interfaces=14;
+    repeated ServiceStatus services=15;
+    repeated DiskUsage disks=16;
+    int32 frames_dropped_since_last_connect=17;
+}
+
+
+message Ack {
+    string frame_id=1;
+    int64 received_at=2;
+    bool stored=3;
+    string error=4;
+}
+
+
+message RegisterAck{
+    int64 received_at=1;
+    bool success=2;
+    string error=3;
+}
+
+service MetricService {
+    rpc Register (HostInfo) returns (RegisterAck);
+    rpc Stream (stream MetricFrame) returns (stream Ack );
+}
