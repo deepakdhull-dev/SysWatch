@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 import time
 import uuid
 
 from .collectors import *
-from .config import Config
+from .config import Config, detect_default_interface
 
 logger = logging.getLogger(__name__)
 
 
 class Assembler:
-    def __init__(self, cfg):
+    def __init__(self, cfg: Config):
         self.cfg = cfg
 
         self._cpu = CPUCollector()
@@ -33,7 +32,7 @@ class Assembler:
         }
 
         self._tasks = []
-        self._interface = None
+        self._network_iface = None
 
     async def start(self):
         self._tasks = [
@@ -86,22 +85,25 @@ class Assembler:
                 name="service-collector",
             ),
         ]
-        logger.info(f"Assembler starter {len(self._tasks)} collector tasks")
+        logger.info(f"Assembler started {len(self._tasks)} collector tasks")
 
     async def stop(self):
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
-        logger.info(f"Assembler stopped all colector tasks")
+        logger.info(f"Assembler stopped all collector tasks")
 
     async def collect_loop(self, key, collect_fn, interval):
+        logger.debug(
+            "Starting collection loop for '%s' (interval=%.1fs)", key, interval
+        )
         while True:
             try:
                 result = collect_fn()
                 if result is not None:
                     self._latest[key] = result
             except Exception as e:
-                logger.warning(f"Collector {key} raised {type(e).__name__}:{e}")
+                logger.warning(f"Collector {key} raised {type(e).__name__}: {e}")
             await asyncio.sleep(interval)
 
     def _cpu_collect(self):
@@ -120,16 +122,15 @@ class Assembler:
         return self._service.collect()
 
     def _network_collect(self):
-        interface = subprocess.run(
-            ["ip", "route", "show", "default"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        intf = interface.stdout.strip().split()[4]
-        if self._network is None or self._interface != intf:
-            self._network = NetworkCollector(intf)
-            self._interface = intf
+        current_iface = detect_default_interface()
+        if current_iface is None:
+            return None
+        if current_iface != self._network_iface:
+            logger.info(
+                "Network interface changed: %s → %s", self._network_iface, current_iface
+            )
+            self._network_iface = current_iface
+            self._network = NetworkCollector(current_iface)
         return self._network.collect()
 
     async def assemble_frame(self, frames_dropped=0):
