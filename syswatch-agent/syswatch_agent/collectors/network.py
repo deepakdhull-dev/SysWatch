@@ -42,6 +42,7 @@ class NetworkCollector:
 
         self.prev = curr
         return {
+            "interface_name": self.interface,
             "bytes_in": delta_bytes_in,
             "bytes_out": delta_bytes_out,
             "packets_in": delta_packets_in,

@@ -13,11 +13,11 @@ class RAMCollector:
     def collect(self):
         mem = self.read_proc()
         res = {}
-        res["mem_total"] = round(mem["MemTotal"] / (1024 * 1024), 1)
-        res["mem_used"] = round(
+        res["ram_total"] = round(mem["MemTotal"] / (1024 * 1024), 1)
+        res["ram_used"] = round(
             (mem["MemTotal"] - mem["MemAvailable"]) / (1024 * 1024), 1
         )
-        res["mem_pct"] = round(
+        res["ram_pct"] = round(
             (mem["MemTotal"] - mem["MemAvailable"]) / mem["MemTotal"] * 100, 2
         )
         res["swap_total"] = round(mem["SwapTotal"] / (1024 * 1024), 1)
