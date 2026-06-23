@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "syswatch-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "grpcio>=1.63.0",
+    "grpcio-tools>=1.63.0",
+    "protobuf>=5.27.0",
+    "psutil>=6.0.0",
+    "structlog>=24.4.0",
+]
+
+[project.scripts]
+syswatch-agent = "syswatch_agent.cli:main"
+
+# ── Hatchling ─────────────────────────────────────────────────────────────────
+# Exclude generated proto files from sdist; they are regenerated via `make proto`.
+[tool.hatch.build.targets.wheel]
+packages = ["syswatch_agent"]
+exclude = [
+    "syswatch_agent/proto/syswatch_pb2.py",
+    "syswatch_agent/proto/syswatch_pb2_grpc.py",
+]
+
+# ── Mypy ──────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# grpc stubs are incomplete; suppress for generated files
+[[tool.mypy.overrides]]
+module = ["syswatch_agent.proto.*", "grpc.*", "psutil.*"]
+ignore_missing_imports = true
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+exclude = ["syswatch_agent/proto/syswatch_pb2*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+ignore = [
+    "ANN101",  # self annotation
+    "ANN102",  # cls annotation
+]
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["syswatch_agent"]
+omit = ["syswatch_agent/proto/syswatch_pb2*.py"]
