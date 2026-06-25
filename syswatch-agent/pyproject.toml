@@ -5,22 +5,39 @@ build-backend = "hatchling.build"
 [project]
 name = "syswatch-agent"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "grpcio>=1.63.0",
-    "grpcio-tools>=1.63.0",
     "protobuf>=5.27.0",
     "psutil>=6.0.0",
+    "pyyaml>=6.0.2",
     "structlog>=24.4.0",
 ]
 
 [project.scripts]
+# Management CLI: start / stop / status / update / service add|delete|list
 syswatch-agent = "syswatch_agent.cli:main"
+# Daemon process: what systemd calls via ExecStart
+syswatch-agent-daemon = "syswatch_agent.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.63.0",
+#    "pytest>=8.3.0",
+#    "pytest-asyncio>=0.24.0",
+#    "pytest-cov>=5.0.0",
+    "mypy>=1.11.0",
+    "ruff>=0.6.0",
+]
 
 # ── Hatchling ─────────────────────────────────────────────────────────────────
-# Exclude generated proto files from sdist; they are regenerated via `make proto`.
+# Proto generated files are produced by `make proto` before building the wheel.
+# They are included in the wheel (non-editable install requires them present).
+# Excluded from sdist — consumers regenerate from proto/syswatch.proto source.
 [tool.hatch.build.targets.wheel]
 packages = ["syswatch_agent"]
+
+[tool.hatch.build.targets.sdist]
 exclude = [
     "syswatch_agent/proto/syswatch_pb2.py",
     "syswatch_agent/proto/syswatch_pb2_grpc.py",
@@ -28,16 +45,16 @@ exclude = [
 
 # ── Mypy ──────────────────────────────────────────────────────────────────────
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
-# grpc stubs are incomplete; suppress for generated files
+
 [[tool.mypy.overrides]]
-module = ["syswatch_agent.proto.*", "grpc.*", "psutil.*"]
+module = ["syswatch_agent.proto.*", "grpc.*", "psutil.*", "yaml.*"]
 ignore_missing_imports = true
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 88
 exclude = ["syswatch_agent/proto/syswatch_pb2*.py"]
 
@@ -49,10 +66,11 @@ ignore = [
 ]
 
 # ── Pytest ────────────────────────────────────────────────────────────────────
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
+#[tool.pytest.ini_options]
+#asyncio_mode = "auto"
+#testpaths = ["tests"]
+#pythonpath = ["."]
 
-[tool.coverage.run]
-source = ["syswatch_agent"]
-omit = ["syswatch_agent/proto/syswatch_pb2*.py"]
+#[tool.coverage.run]
+#source = ["syswatch_agent"]
+#omit = ["syswatch_agent/proto/syswatch_pb2*.py"]

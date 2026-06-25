@@ -1,8 +1,6 @@
 import platform
 import socket
 
-import psutil
-
 
 class HostInfoCollector:
     def cpu_model(self):
@@ -12,6 +10,24 @@ class HostInfoCollector:
                     return line.split(":", 1)[1].strip()
 
         return "Unknown"
+
+    def cpu_threads(self):
+        with open("/proc/cpuinfo", "r") as f:
+            lines = f.readlines()
+        threads = 0
+        for line in lines:
+            if line.split(":")[0].strip() == "processor":
+                threads += 1
+        return threads
+
+    def cpu_cores(self):  # may undercount on multi-socket system
+        with open("/proc/cpuinfo", "r") as f:
+            lines = f.readlines()
+        for line in lines:
+            parts = line.strip().split(":")
+            if parts[0].strip() == "cpu cores":
+                return int(parts[1].strip())
+        return 0
 
     def os_name(self):
         with open("/etc/os-release") as f:
@@ -27,6 +43,6 @@ class HostInfoCollector:
             "kernel": platform.release(),
             "os_name": self.os_name(),
             "cpu_model": self.cpu_model(),
-            "cpu_cores": psutil.cpu_count(logical=False),
-            "cpu_threads": psutil.cpu_count(logical=True),
+            "cpu_cores": self.cpu_cores(),
+            "cpu_threads": self.cpu_threads(),
         }

@@ -1,4 +1,5 @@
-import .python_pb2
-import .python_pb2_grpc
+from __future__ import annotations
 
-__all__=["python_pb2","python_pb2_grpc"]
+from . import syswatch_pb2, syswatch_pb2_grpc
+
+__all__ = ["syswatch_pb2", "syswatch_pb2_grpc"]

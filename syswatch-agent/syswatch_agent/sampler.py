@@ -12,7 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class Sampler:
-    def __init__(self, cfg: Config, assembler, drop_counter, out_queue):
+    def __init__(
+        self,
+        cfg: Config,
+        assembler: Assembler,
+        drop_counter: DropCounter,
+        out_queue: asyncio.Queue,
+    ):
         self._cfg = cfg
         self._assembler = assembler
         self._drop_counter = drop_counter
@@ -32,7 +38,8 @@ class Sampler:
             self._tasks.cancel()
             await asyncio.gather(self._tasks, return_exceptions=True)
         logger.info(
-            f"Sampler stopped. emmited {self._frames_emitted} frames. dropped (queue full) {self._frame_dropped_queue_full} frames"
+            f"Sampler stopped. emmited {self._frames_emitted} frames."
+            f" dropped (queue full) {self._frame_dropped_queue_full} frames"
         )
 
     async def run(self):
