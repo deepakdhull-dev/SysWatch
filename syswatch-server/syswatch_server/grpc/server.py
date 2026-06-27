@@ -12,7 +12,7 @@ from ..exceptions import CertificateError
 from ..proto import syswatch_pb2_grpc
 
 if TYPE_CHECKING:
-    from .ervicer import MetricServicer
+    from .servicer import MetricServicer
 
 logger = logging.getLogger(__name__)
 
