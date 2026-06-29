@@ -1,0 +1,16 @@
+
+[Unit]
+Description=syswatch telemetry server (gRPC ingestion + web dashboard)
+Documentation=https://github.com/yourname/syswatch
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=syswatch
+Group=syswatch
+WorkingDirectory=/opt/syswatch-server
+ExecStart=/opt/syswatch-server/venv/bin/python -m syswatch_server
+Environment=SYSWATCH_CONFIG=/etc/syswatch/server/config.yaml
+Environment=SYSWATCH_HOME=/opt/syswatch-server

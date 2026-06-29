@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=syswatch
+GenericName=Infrastructure Monitor
+Comment=Open the syswatch telemetry dashboard
+Exec=xdg-open http://127.0.0.1:8000
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;Network;
+Keywords=monitoring;metrics;telemetry;infrastructure;observability;
+StartupNotify=false
