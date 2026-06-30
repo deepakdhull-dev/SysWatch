@@ -11,9 +11,9 @@ SERVICE_NAME = "syswatch-server"
 DEFAULT_WEB_URL = "http://127.0.0.1:8080"
 
 
-def _run(cmd: list[str]) -> int:
+def _run(cmd: list[str], cwd: str | None = None) -> int:
     try:
-        return subprocess.call(cmd)
+        return subprocess.call(cmd, cwd=cwd)
     except FileNotFoundError:
         print(f"Command not found: {cmd[0]}", file=sys.stderr)
         return 127
@@ -67,7 +67,7 @@ def cmd_migrate(_args: argparse.Namespace) -> int:
     if not os.path.isfile(alembic_bin):
         alembic_bin = "alembic"  # fall back to PATH lookup as a last resort
 
-    return _run([alembic_bin, "-c", alembic_ini, "upgrade", "head"])
+    return _run([alembic_bin, "-c", alembic_ini, "upgrade", "head"], cwd=workdir)
 
 
 def cmd_health(_args: argparse.Namespace) -> int:

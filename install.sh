@@ -348,7 +348,22 @@ install_server() {
 
     install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
         "${ALEMBIC_INI_SRC}" "${SERVER_INSTALL_DIR}/alembic.ini"
-    log "alembic.ini installed at ${SERVER_INSTALL_DIR}/alembic.ini"
+
+    # alembic.ini ships with script_location = syswatch_server/migrations, a
+    # path relative to a source checkout. Once syswatch_server is pip-installed
+    # into this venv, the real migrations/ directory lives inside
+    # <venv>/lib/python3.X/site-packages/syswatch_server/migrations — a path
+    # that depends on the exact Python minor version, so it must be resolved
+    # dynamically rather than hardcoded. Patch the installed copy in place.
+    MIGRATIONS_PATH=$("${SERVER_VENV}/bin/python" -c \
+        "import syswatch_server, os; print(os.path.join(os.path.dirname(syswatch_server.__file__), 'migrations'))")
+    [[ -d "${MIGRATIONS_PATH}" ]] \
+        || die "syswatch_server.migrations not found at ${MIGRATIONS_PATH} after wheel install — wheel may be missing migrations/ as package data"
+
+    sed -i "s#^script_location = .*#script_location = ${MIGRATIONS_PATH}#" \
+        "${SERVER_INSTALL_DIR}/alembic.ini"
+
+    log "alembic.ini installed at ${SERVER_INSTALL_DIR}/alembic.ini (script_location=${MIGRATIONS_PATH})"
 
     # ── Database setup ─────────────────────────────────────────────────────
     _setup_database
