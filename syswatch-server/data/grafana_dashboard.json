@@ -16,7 +16,7 @@
         "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
         "query": "SELECT agent_id FROM agents ORDER BY agent_id",
         "refresh": 2,
-        "includeAll": true,
+        "includeAll": false,
         "multi": false
       }
     ]

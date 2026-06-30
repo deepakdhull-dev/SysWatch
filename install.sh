@@ -923,6 +923,11 @@ EOF
     # is REQUIRED by Grafana's API — omitting it returns 400 "bad request
     # data", which curl -sf swallows into an empty DS_RESPONSE, which the
     # fallback below then misreports as "datasource may already exist".
+    # jsonData.database is ALSO required (duplicating the top-level
+    # 'database' field) — newer Grafana Postgres plugin builds read the
+    # default database from jsonData, not the legacy top-level field; without
+    # it the connection health-checks OK but every query fails with "You do
+    # not currently have a default database configured for this data source".
     DS_PAYLOAD=$(python3 -c "
 import json
 print(json.dumps({
@@ -934,6 +939,7 @@ print(json.dumps({
     'user': '${PG_USER}',
     'secureJsonData': {'password': '''${PG_PASSWORD}'''},
     'jsonData': {
+        'database': '${PG_DB}',
         'sslmode': 'disable',
         'postgresVersion': $(( PG_VERSION * 100 )),
         'timescaledb': True,
