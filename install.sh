@@ -380,6 +380,9 @@ install_server() {
     # ── Systemd: syswatch-server ───────────────────────────────────────────
     _install_server_unit
 
+    # ── Systemd: retention timer (replaces native TSL retention policy) ────
+    _install_retention_timer
+
     # ── Configure Grafana datasource + dashboards ──────────────────────────
     _configure_grafana
 
@@ -397,6 +400,7 @@ install_server() {
     systemctl enable --now prometheus
     systemctl enable --now alertmanager
     systemctl enable --now syswatch-server
+    systemctl enable --now syswatch-retention.timer
 
     # ── Post-install summary ───────────────────────────────────────────────
     SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -743,6 +747,51 @@ print(bcrypt.hash(sys.argv[1]))
     chmod 640 "${SERVER_CONFIG_DIR}/config.yaml"
     chown "${SYSWATCH_USER}:${SYSWATCH_GROUP}" "${SERVER_CONFIG_DIR}/config.yaml"
     log "Config written: ${SERVER_CONFIG_DIR}/config.yaml"
+}
+
+# ── Retention (replaces TimescaleDB's native add_retention_policy, which is
+# a TSL/Community-licensed feature unavailable on the Apache 2.0 edition) ──────
+_install_retention_timer() {
+    log "Installing daily retention job (systemd timer)"
+
+    RETENTION_SQL_SRC=""
+    for candidate in \
+        "$(dirname "${BASH_SOURCE[0]}")/syswatch-server/data/retention.sql"
+    do
+        [[ -f "${candidate}" ]] && RETENTION_SQL_SRC="${candidate}"
+    done
+    [[ -n "${RETENTION_SQL_SRC}" ]] \
+        || die "Could not locate retention.sql next to install.sh (expected at syswatch-server/data/retention.sql)"
+
+    install -d -m 750 -o postgres -g postgres "${SERVER_CONFIG_DIR}/retention"
+    install -m 640 -o postgres -g postgres \
+        "${RETENTION_SQL_SRC}" "${SERVER_CONFIG_DIR}/retention/retention.sql"
+
+    cat > /etc/systemd/system/syswatch-retention.service <<EOF
+[Unit]
+Description=syswatch metric retention sweep (DELETE-based, no TSL license required)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/usr/bin/psql -d ${PG_DB} -v ON_ERROR_STOP=1 -f ${SERVER_CONFIG_DIR}/retention/retention.sql
+EOF
+
+    cat > /etc/systemd/system/syswatch-retention.timer <<EOF
+[Unit]
+Description=Run syswatch-retention.service daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    log "Retention timer installed (runs daily, deletes rows older than 30 days)"
 }
 
 # ── Server systemd unit ───────────────────────────────────────────────────────

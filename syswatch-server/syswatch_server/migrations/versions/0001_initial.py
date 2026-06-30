@@ -192,36 +192,16 @@ def upgrade() -> None:
         """
     )
 
-    for table in ("metrics", "metrics_disk", "metrics_network", "metrics_service"):
-        op.execute(
-            f"""
-            ALTER TABLE {table} SET (
-                timescaledb.compress,
-                timescaledb.compress_segmentby = 'agent_id',
-                timescaledb.compress_orderby   = 'time DESC'
-            )
-            """
-        )
-        op.execute(
-            f"""
-            SELECT add_compression_policy(
-                '{table}',
-                compress_after => INTERVAL '7 days',
-                if_not_exists  => TRUE
-            )
-            """
-        )
-
-    for table in ("metrics", "metrics_disk", "metrics_network", "metrics_service"):
-        op.execute(
-            f"""
-            SELECT add_retention_policy(
-                '{table}',
-                drop_after    => INTERVAL '30 days',
-                if_not_exists => TRUE
-            )
-            """
-        )
+    # NOTE: native compression (timescaledb.compress / add_compression_policy)
+    # and native retention policies (add_retention_policy) are BOTH TSL
+    # (Timescale Community License) features, not Apache 2.0 -- confirmed via
+    # a real FeatureNotSupportedError on Debian's Apache-edition package, not
+    # an assumption. Neither can run here. Compression is dropped entirely
+    # (tables stay uncompressed; acceptable at this dataset's scale).
+    # Retention is reimplemented as a plain DELETE, scheduled externally via
+    # an OS-level cron job / systemd timer (see data/retention.sql and
+    # install.sh's _install_retention_cron), since there is no Apache-2
+    # equivalent of add_retention_policy.
 
 
 def downgrade() -> None:
