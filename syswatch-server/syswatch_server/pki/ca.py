@@ -31,10 +31,10 @@ RSA_PUBLIC_EXPONENT: int = 65537
 
 @dataclass
 class CertPaths:
-    ca_cert: str = "/etc/syswatch/server/ca.crt"
-    ca_key: str = "/etc/syswatch/server/ca.key"
-    server_cert: str = "/etc/syswatch/server/server.crt"
-    server_key: str = "/etc/syswatch/server/server.key"
+    ca_cert: str = "/etc/syswatch/pki/ca/ca.crt"
+    ca_key: str = "/etc/syswatch/pki/ca/ca.key"
+    server_cert: str = "/etc/syswatch/pki/server/server.crt"
+    server_key: str = "/etc/syswatch/pki/server/server.key"
 
 
 def _generate_rsa_key(key_size: int) -> rsa.RSAPrivateKey:

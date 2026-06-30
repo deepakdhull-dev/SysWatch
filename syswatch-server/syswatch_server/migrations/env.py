@@ -26,16 +26,14 @@ def _build_dsn_from_config(config_path: str) -> str:
     with open(cfg_file) as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
-    db = raw.get("db", {})
-    user = db.get("user", "syswatch")
-    password = db.get("password", "")
-    host = db.get("host", "localhost")
-    port = int(db.get("port", 5432))
-    name = db.get("name", "syswatch")
-
-    if password:
-        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
-    return f"postgresql+asyncpg://{user}@{host}:{port}/{name}"
+    database = raw.get("database", {})
+    url = database.get("url")
+    if not url:
+        raise FileNotFoundError(
+            f"config at {config_path} has no database.url set. "
+            "Set SYSWATCH_DB_DSN to a full connection string instead."
+        )
+    return url
 
 
 def get_dsn() -> str:

@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_GRPC_MAX_WORKERS = 4
+
+
 class GrpcServer:
     def __init__(self, cfg: Any, servicer: MetricServicer) -> None:
         self._cfg = cfg
@@ -29,7 +32,7 @@ class GrpcServer:
             raise CertificateError(
                 f"mTLS {label} not found at {path}. "
                 "Run install.sh (server path) to generate all certificates, "
-                "or check that /etc/syswatch/server/ is intact."
+                "or check that /etc/syswatch/pki/ is intact."
             )
         try:
             return p.read_bytes()
@@ -37,11 +40,11 @@ class GrpcServer:
             raise CertificateError(
                 f"Cannot read mTLS {label} at {path}: permission denied. "
                 "The server process must run as a user with read access to "
-                "/etc/syswatch/server/."
+                "/etc/syswatch/pki/."
             ) from exc
 
     def build_credentials(self):
-        tls = self._cfg.grpc.tls
+        tls = self._cfg.tls
 
         ca_cert = self.read_cert_file(tls.ca_cert, "CA certificate")
         server_key = self.read_cert_file(tls.server_key, "server private key")
@@ -62,23 +65,24 @@ class GrpcServer:
 
     async def start(self):
         credentials = self.build_credentials()
+        max_workers = DEFAULT_GRPC_MAX_WORKERS
         self._server = grpc.aio.server(
             futures.ThreadPoolExecutor(
-                max_workers=self._cfg.grpc.max_workers, thread_name_prefix="grpc-worker"
+                max_workers=max_workers, thread_name_prefix="grpc-worker"
             )
         )
         syswatch_pb2_grpc.add_MetricServiceServicer_to_server(
             self._servicer, self._server
         )
 
-        bind_address = f"{self._cfg.grpc.host}:{self._cfg.grpc.port}"
+        bind_address = f"{self._cfg.server.grpc_host}:{self._cfg.server.grpc_port}"
         self._server.add_secure_port(bind_address, credentials)
         await self._server.start()
 
         logger.info(
             "gRPC server listening on %s (mTLS=on, require_client_auth=True, max_workers=%d)",
             bind_address,
-            self._cfg.grpc.max_workers,
+            max_workers,
         )
 
     async def stop(self, grace: float = 5.0):

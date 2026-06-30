@@ -21,7 +21,10 @@ dependencies = [
     "python-multipart>=0.0.9",   # FastAPI Form() / file uploads
     # Auth
     "pyjwt[crypto]>=2.8.0",      # RS256 JWT (crypto extra pulls in cryptography)
-    "passlib[bcrypt]>=1.7.4",    # bcrypt password hashing
+    "passlib[bcrypt]>=1.7.4",     # bcrypt password hashing
+    "bcrypt<4.1",                 # passlib 1.7.4 cannot detect bcrypt>=4.1's
+                                   # version metadata; pin until passlib's
+                                   # bcrypt backend is fixed upstream
     # PKI
     "cryptography>=42.0.0",
     # Alerting

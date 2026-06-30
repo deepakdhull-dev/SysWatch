@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
 
@@ -19,21 +20,18 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
     )
 
 
-def _build_dsn(cfg: Any) -> str:
-    logger.debug(
-        "Building DSN: host=%s port=%d db=%s user=%s",
-        cfg.host,
-        cfg.port,
-        cfg.name,
-        cfg.user,
-    )
+def _build_dsn(database_cfg: Any) -> str:
+    # config.yaml stores database.url as a single SQLAlchemy-style DSN
+    # (postgresql+asyncpg://user:pass@host:port/db), used as-is by Alembic's
+    # SQLAlchemy engine. asyncpg's own driver does not understand the
+    # "+asyncpg" dialect suffix, so it must be stripped here before passing
+    # the DSN to asyncpg.create_pool().
+    parts = urlsplit(database_cfg.url)
+    scheme = parts.scheme.split("+", 1)[0]  # "postgresql+asyncpg" -> "postgresql"
+    dsn = urlunsplit((scheme, parts.netloc, parts.path, parts.query, parts.fragment))
 
-    if cfg.password:
-        return (
-            f"postgresql://{cfg.user}:{cfg.password}@{cfg.host}:{cfg.port}/{cfg.name}"
-        )
-    else:
-        return f"postgresql://{cfg.user}@{cfg.host}:{cfg.port}/{cfg.name}"
+    logger.debug("Built asyncpg DSN from database.url (driver suffix stripped)")
+    return dsn
 
 
 async def _check_timescaledb(pool: asyncpg.Pool) -> None:
@@ -57,28 +55,26 @@ async def _check_timescaledb(pool: asyncpg.Pool) -> None:
 
 
 async def create_pool(cfg: Any) -> asyncpg.Pool:
-    db_cfg = cfg.db
+    db_cfg = cfg.database
     dsn = _build_dsn(db_cfg)
 
     logger.info(
-        "Creating asyncpg pool: host=%s port=%d db=%s min=%d max=%d",
-        db_cfg.host,
-        db_cfg.port,
-        db_cfg.name,
-        db_cfg.min_pool,
-        db_cfg.max_pool,
+        "Creating asyncpg pool: pool_size=%d max_overflow=%d pool_timeout=%ds",
+        db_cfg.pool_size,
+        db_cfg.max_overflow,
+        db_cfg.pool_timeout,
     )
 
     pool: asyncpg.Pool = await asyncpg.create_pool(
         dsn=dsn,
-        min_size=db_cfg.min_pool,
-        max_size=db_cfg.max_pool,
+        min_size=db_cfg.pool_size,
+        max_size=db_cfg.pool_size + db_cfg.max_overflow,
         init=_init_connection,
-        command_timeout=30.0,
+        command_timeout=float(db_cfg.pool_timeout),
         max_inactive_connection_lifetime=300.0,
     )
 
-    logger.info("asyncpg pool created (%d initial connections)", db_cfg.min_pool)
+    logger.info("asyncpg pool created (%d initial connections)", db_cfg.pool_size)
 
     await _check_timescaledb(pool)
 

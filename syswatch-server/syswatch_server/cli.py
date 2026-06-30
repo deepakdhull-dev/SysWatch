@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 
 SERVICE_NAME = "syswatch-server"
-DEFAULT_WEB_URL = "http://127.0.0.1:8000"
+DEFAULT_WEB_URL = "http://127.0.0.1:8080"
 
 
 def _run(cmd: list[str]) -> int:
@@ -53,9 +53,21 @@ def cmd_migrate(_args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    return _run(
-        ["alembic", "-c", os.path.join(workdir, "alembic.ini"), "upgrade", "head"]
-    )
+
+    alembic_ini = os.path.join(workdir, "alembic.ini")
+    if not os.path.isfile(alembic_ini):
+        print(f"alembic.ini not found at {alembic_ini}", file=sys.stderr)
+        return 1
+
+    # Use the venv's own alembic binary (same venv this CLI is running from),
+    # not a bare "alembic" lookup on $PATH — the venv's bin/ is not on PATH
+    # when invoked via the syswatch-server console_script entry point.
+    venv_bin = os.path.dirname(sys.executable)
+    alembic_bin = os.path.join(venv_bin, "alembic")
+    if not os.path.isfile(alembic_bin):
+        alembic_bin = "alembic"  # fall back to PATH lookup as a last resort
+
+    return _run([alembic_bin, "-c", alembic_ini, "upgrade", "head"])
 
 
 def cmd_health(_args: argparse.Namespace) -> int:

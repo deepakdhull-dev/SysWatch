@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import jwt
-import yaml
 from fastapi import Response
 from passlib.context import CryptContext
 
@@ -17,20 +16,22 @@ logger = logging.getLogger(__name__)
 ACCESS_COOKIE = "syswatch_access"
 REFRESH_COOKIE = "syswatch_refresh"
 
-ACCESS_TOKEN_EXPIRE = datetime.timedelta(hours=1)
-REFRESH_TOKEN_EXPIRE = datetime.timedelta(days=7)
-
-ALGORITHM = "RS256"
-
-ADMIN_USERNAME = "admin"
-
 
 class AuthManager:
     def __init__(self, cfg: Any) -> None:
+        jwt_cfg = cfg.jwt
         auth_cfg = cfg.auth
 
-        private_key_path = Path(auth_cfg.jwt_private_key)
-        public_key_path = Path(auth_cfg.jwt_public_key)
+        self._algorithm: str = jwt_cfg.algorithm
+        self._access_expire = datetime.timedelta(
+            minutes=jwt_cfg.access_token_expire_minutes
+        )
+        self._refresh_expire = datetime.timedelta(
+            days=jwt_cfg.refresh_token_expire_days
+        )
+
+        private_key_path = Path(jwt_cfg.private_key)
+        public_key_path = Path(jwt_cfg.public_key)
 
         for path, label in [
             (private_key_path, "JWT private key"),
@@ -46,29 +47,22 @@ class AuthManager:
         self._public_key: str = public_key_path.read_text()
         logger.info(
             "JWT keys loaded (private=%s public=%s)",
-            auth_cfg.jwt_private_key,
-            auth_cfg.jwt_public_key,
+            jwt_cfg.private_key,
+            jwt_cfg.public_key,
         )
 
-        creds_path = Path(auth_cfg.credentials_file)
-        if not creds_path.exists():
+        self._admin_username: str = auth_cfg.admin_username
+        self._password_hash: str = auth_cfg.admin_password_hash
+
+        if not self._password_hash:
             raise ConfigError(
-                f"Admin credentials file not found at {creds_path}. "
-                "Run install.sh (server path) to set the admin password."
+                "auth.admin_password_hash is empty in config.yaml. "
+                "Run install.sh (server path) to set the admin password, or "
+                "set SYSWATCH_AUTH_ADMIN_PASSWORD_HASH."
             )
 
-        with open(creds_path) as f:
-            creds = yaml.safe_load(f)
-
-        if not isinstance(creds, dict) or "password_hash" not in creds:
-            raise ConfigError(
-                f"credentials.yaml at {creds_path} is malformed. "
-                "Expected YAML with 'password_hash' key."
-            )
-
-        self._password_hash: str = creds["password_hash"]
         self._pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        logger.info("Admin credentials loaded from %s", creds_path)
+        logger.info("Admin credentials loaded for user %r", self._admin_username)
 
     def verify_password(self, plain: str) -> bool:
         try:
@@ -78,7 +72,7 @@ class AuthManager:
             return False
 
     def verify_login(self, username: str, password: str) -> bool:
-        if username != ADMIN_USERNAME:
+        if username != self._admin_username:
             self._pwd_context.dummy_verify()
             return False
         return self.verify_password(password)
@@ -86,28 +80,28 @@ class AuthManager:
     def _create_token(self, token_type: str, expire: datetime.timedelta) -> str:
         now = datetime.datetime.now(datetime.timezone.utc)
         payload = {
-            "sub": ADMIN_USERNAME,
+            "sub": self._admin_username,
             "type": token_type,
             "iat": now,
             "exp": now + expire,
         }
-        return jwt.encode(payload, self._private_key, algorithm=ALGORITHM)
+        return jwt.encode(payload, self._private_key, algorithm=self._algorithm)
 
     def create_access_token(self) -> str:
-        return self._create_token("access", ACCESS_TOKEN_EXPIRE)
+        return self._create_token("access", self._access_expire)
 
     def create_refresh_token(self) -> str:
-        return self._create_token("refresh", REFRESH_TOKEN_EXPIRE)
+        return self._create_token("refresh", self._refresh_expire)
 
     def verify_token(self, token: str, expected_type: str = "access") -> bool:
         try:
             payload = jwt.decode(
                 token,
                 self._public_key,
-                algorithms=[ALGORITHM],
+                algorithms=[self._algorithm],
             )
             return (
-                payload.get("sub") == ADMIN_USERNAME
+                payload.get("sub") == self._admin_username
                 and payload.get("type") == expected_type
             )
         except jwt.ExpiredSignatureError:
@@ -119,7 +113,7 @@ class AuthManager:
 
     def decode_token(self, token: str) -> dict | None:
         try:
-            return jwt.decode(token, self._public_key, algorithms=[ALGORITHM])
+            return jwt.decode(token, self._public_key, algorithms=[self._algorithm])
         except jwt.PyJWTError:
             return None
 
@@ -131,14 +125,14 @@ class AuthManager:
             value=access_token,
             httponly=True,
             samesite="lax",
-            max_age=int(ACCESS_TOKEN_EXPIRE.total_seconds()),
+            max_age=int(self._access_expire.total_seconds()),
         )
         response.set_cookie(
             key=REFRESH_COOKIE,
             value=refresh_token,
             httponly=True,
             samesite="lax",
-            max_age=int(REFRESH_TOKEN_EXPIRE.total_seconds()),
+            max_age=int(self._refresh_expire.total_seconds()),
         )
 
     def delete_auth_cookies(self, response: Response) -> None:

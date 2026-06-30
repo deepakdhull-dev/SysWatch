@@ -14,53 +14,61 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DbConfig:
-    host: str = "localhost"
-    port: int = 5432
-    name: str = "syswatch"
-    user: str = "syswatch"
-    password: str = ""
-    min_pool: int = 2
-    max_pool: int = 10
+class ServerConfig:
+    grpc_host: str = "0.0.0.0"
+    grpc_port: int = 50051
+    http_host: str = "0.0.0.0"
+    http_port: int = 8080
+    metrics_port: int = 9091
 
 
 @dataclass
-class GrpcTlsConfig:
-    ca_cert: str = "/etc/syswatch/server/ca.crt"
-    server_cert: str = "/etc/syswatch/server/server.crt"
-    server_key: str = "/etc/syswatch/server/server.key"
+class DatabaseConfig:
+    url: str = "postgresql+asyncpg://syswatch:changeme@localhost:5432/syswatch"
+    pool_size: int = 10
+    max_overflow: int = 5
+    pool_timeout: int = 30
 
 
 @dataclass
-class GrpcConfig:
-    host: str = "0.0.0.0"
-    port: int = 50051
-    max_workers: int = 4
-    tls: GrpcTlsConfig = field(default_factory=GrpcTlsConfig)
+class TlsConfig:
+    ca_cert: str = "/etc/syswatch/pki/ca/ca.crt"
+    server_cert: str = "/etc/syswatch/pki/server/server.crt"
+    server_key: str = "/etc/syswatch/pki/server/server.key"
 
 
 @dataclass
-class WebConfig:
-    host: str = "127.0.0.1"
-    port: int = 8000
+class JwtConfig:
+    private_key: str = "/etc/syswatch/server/jwt/jwt.key"
+    public_key: str = "/etc/syswatch/server/jwt/jwt.pub"
+    algorithm: str = "RS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
 
 
 @dataclass
 class AuthConfig:
-    jwt_private_key: str = "/etc/syswatch/server/jwt.key"
-    jwt_public_key: str = "/etc/syswatch/server/jwt.pub"
-    credentials_file: str = "/etc/syswatch/server/credentials.yaml"
+    admin_username: str = "admin"
+    admin_password_hash: str = ""
 
 
 @dataclass
-class MetricsConfig:
-    port: int = 9091
+class PkiConfig:
+    ca_key: str = "/etc/syswatch/pki/ca/ca.key"
+    ca_cert: str = "/etc/syswatch/pki/ca/ca.crt"
+    agent_cert_validity_days: int = 365
+
+
+@dataclass
+class PrometheusConfig:
+    url: str = "http://localhost:9090"
 
 
 @dataclass
 class GrafanaConfig:
     url: str = "http://localhost:3000"
-    dashboard_uid: str = "syswatch-main"
+    admin_user: str = "admin"
+    admin_password: str = "syswatch"
 
 
 @dataclass
@@ -76,15 +84,24 @@ class TracingConfig:
 
 
 @dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    format: str = "json"
+
+
+@dataclass
 class Config:
-    db: DbConfig = field(default_factory=DbConfig)
-    grpc: GrpcConfig = field(default_factory=GrpcConfig)
-    web: WebConfig = field(default_factory=WebConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    tls: TlsConfig = field(default_factory=TlsConfig)
+    jwt: JwtConfig = field(default_factory=JwtConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
-    metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    pki: PkiConfig = field(default_factory=PkiConfig)
+    prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
     grafana: GrafanaConfig = field(default_factory=GrafanaConfig)
     alertmanager: AlertmanagerConfig = field(default_factory=AlertmanagerConfig)
     tracing: TracingConfig = field(default_factory=TracingConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
 def _coerce(value: str, target_type: type) -> Any:
@@ -106,7 +123,8 @@ def _apply_env_overrides(section_obj: Any, section_name: str) -> None:
             try:
                 coerced = _coerce(env_val, f.type if isinstance(f.type, type) else str)
                 setattr(section_obj, f.name, coerced)
-                # Do not log secret values (e.g. password). Log only the key.
+                # Do not log secret values (e.g. password hashes, DB URLs with
+                # embedded credentials). Log only the key.
                 logger.debug("Config override from %s", env_key)
             except (ValueError, TypeError) as exc:
                 raise ConfigError(
@@ -127,11 +145,7 @@ def _build_section(section_cls: type, raw: dict[str, Any]) -> Any:
                 "Ignoring unknown config key %r in %s", key, section_cls.__name__
             )
             continue
-        f = known[key]
-        if f.name == "tls" and section_cls is GrpcConfig:
-            kwargs["tls"] = _build_section(GrpcTlsConfig, value)
-        else:
-            kwargs[key] = value
+        kwargs[key] = value
 
     return section_cls(**kwargs)
 
@@ -158,35 +172,38 @@ def load_config(path: str = "/etc/syswatch/server/config.yaml") -> Config:
         )
 
     cfg = Config(
-        db=_build_section(DbConfig, raw.get("db", {})),
-        grpc=_build_section(GrpcConfig, raw.get("grpc", {})),
-        web=_build_section(WebConfig, raw.get("web", {})),
+        server=_build_section(ServerConfig, raw.get("server", {})),
+        database=_build_section(DatabaseConfig, raw.get("database", {})),
+        tls=_build_section(TlsConfig, raw.get("tls", {})),
+        jwt=_build_section(JwtConfig, raw.get("jwt", {})),
         auth=_build_section(AuthConfig, raw.get("auth", {})),
-        metrics=_build_section(MetricsConfig, raw.get("metrics", {})),
+        pki=_build_section(PkiConfig, raw.get("pki", {})),
+        prometheus=_build_section(PrometheusConfig, raw.get("prometheus", {})),
         grafana=_build_section(GrafanaConfig, raw.get("grafana", {})),
         alertmanager=_build_section(AlertmanagerConfig, raw.get("alertmanager", {})),
         tracing=_build_section(TracingConfig, raw.get("tracing", {})),
+        logging=_build_section(LoggingConfig, raw.get("logging", {})),
     )
 
-    _apply_env_overrides(cfg.db, "db")
-    _apply_env_overrides(cfg.grpc, "grpc")
-    _apply_env_overrides(cfg.web, "web")
+    _apply_env_overrides(cfg.server, "server")
+    _apply_env_overrides(cfg.database, "database")
+    _apply_env_overrides(cfg.tls, "tls")
+    _apply_env_overrides(cfg.jwt, "jwt")
     _apply_env_overrides(cfg.auth, "auth")
-    _apply_env_overrides(cfg.metrics, "metrics")
+    _apply_env_overrides(cfg.pki, "pki")
+    _apply_env_overrides(cfg.prometheus, "prometheus")
     _apply_env_overrides(cfg.grafana, "grafana")
     _apply_env_overrides(cfg.alertmanager, "alertmanager")
     _apply_env_overrides(cfg.tracing, "tracing")
+    _apply_env_overrides(cfg.logging, "logging")
 
     logger.debug(
-        "Config resolved: db=%s:%d/%s grpc=%s:%d web=%s:%d metrics=%d tracing=%s",
-        cfg.db.host,
-        cfg.db.port,
-        cfg.db.name,
-        cfg.grpc.host,
-        cfg.grpc.port,
-        cfg.web.host,
-        cfg.web.port,
-        cfg.metrics.port,
+        "Config resolved: grpc=%s:%d http=%s:%d metrics=%d tracing=%s",
+        cfg.server.grpc_host,
+        cfg.server.grpc_port,
+        cfg.server.http_host,
+        cfg.server.http_port,
+        cfg.server.metrics_port,
         cfg.tracing.enabled,
     )
 

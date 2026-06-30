@@ -7,7 +7,7 @@
 #           all systemd units
 #
 # Requirements (both modes):
-#   - Debian 12 (Bookworm) x86_64
+#   - Debian 13 (Trixie) x86_64
 #   - Run as root
 #   - Internet access for apt/pip
 #
@@ -30,7 +30,7 @@ LOG_DIR="/var/log/syswatch"
 AGENT_VENV="${AGENT_INSTALL_DIR}/venv"
 SERVER_VENV="${SERVER_INSTALL_DIR}/venv"
 TIMESCALEDB_VERSION="2"
-PG_VERSION="16"
+PG_VERSION="17"
 PG_DB="syswatch"
 PG_USER="syswatch"
 GRAFANA_PORT="3000"
@@ -74,6 +74,21 @@ install_pip_package() {
     "${venv}/bin/pip" install --quiet --no-deps "${wheel}"
     # Install runtime deps from PyPI (wheel's metadata declares them)
     "${venv}/bin/pip" install --quiet "${wheel}"
+}
+
+ensure_python313() {
+    # Debian 13 (Trixie) ships Python 3.13 as the default python3 package,
+    # so a plain apt install satisfies the project's >=3.13 requirement.
+    apt-get install -y -qq python3 python3-venv python3-pip
+    PYTHON313_BIN="$(command -v python3)"
+    [[ -x "${PYTHON313_BIN}" ]] || die "python3 not found after install"
+
+    PY_VER="$("${PYTHON313_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    case "${PY_VER}" in
+        3.13|3.1[4-9]) : ;;
+        *) die "python3 is ${PY_VER}, but syswatch requires >=3.13. Are you on Debian 13 (Trixie) or newer?" ;;
+    esac
+    log "Using Python ${PY_VER} at ${PYTHON313_BIN}"
 }
 
 # ── Mode selection ─────────────────────────────────────────────────────────────
@@ -128,7 +143,8 @@ install_agent() {
     # ── Deps ───────────────────────────────────────────────────────────────
     log "Installing system dependencies"
     apt-get update -qq
-    apt-get install -y -qq python3 python3-venv python3-pip unzip
+    apt-get install -y -qq curl unzip
+    ensure_python313
 
     # ── Directories ────────────────────────────────────────────────────────
     create_system_user
@@ -166,7 +182,7 @@ install_agent() {
 
     # ── Venv + wheel ───────────────────────────────────────────────────────
     log "Creating virtualenv"
-    python3 -m venv "${AGENT_VENV}"
+    "${PYTHON313_BIN}" -m venv "${AGENT_VENV}"
     "${AGENT_VENV}/bin/pip" install --quiet --upgrade pip
 
     log "Installing agent wheel"
@@ -257,9 +273,9 @@ install_server() {
     apt-get update -qq
     apt-get install -y -qq \
         curl gnupg lsb-release ca-certificates \
-        python3 python3-venv python3-pip \
         openssl \
         unzip wget
+    ensure_python313
 
     # ── PostgreSQL + TimescaleDB ───────────────────────────────────────────
     _install_postgresql_timescaledb
@@ -291,7 +307,7 @@ install_server() {
 
     # ── Venv + wheel ───────────────────────────────────────────────────────
     log "Creating server virtualenv"
-    python3 -m venv "${SERVER_VENV}"
+    "${PYTHON313_BIN}" -m venv "${SERVER_VENV}"
     "${SERVER_VENV}/bin/pip" install --quiet --upgrade pip
 
     log "Installing server wheel"
@@ -299,12 +315,31 @@ install_server() {
 
     chown -R "${SYSWATCH_USER}:${SYSWATCH_GROUP}" "${SERVER_INSTALL_DIR}"
 
+    # ── alembic.ini ───────────────────────────────────────────────────────
+    # alembic.ini is not part of the wheel's package data (it's a project-root
+    # config file, not Python package content) — it must be copied alongside
+    # the install directory explicitly. cmd_migrate (syswatch-server migrate)
+    # looks for it at $SYSWATCH_HOME/alembic.ini.
+    ALEMBIC_INI_SRC=""
+    for candidate in \
+        "$(dirname "${BASH_SOURCE[0]}")/syswatch-server/alembic.ini"
+    do
+        [[ -f "${candidate}" ]] && ALEMBIC_INI_SRC="${candidate}"
+    done
+    [[ -n "${ALEMBIC_INI_SRC}" ]] \
+        || die "Could not locate alembic.ini next to install.sh (expected at syswatch-server/alembic.ini)"
+
+    install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
+        "${ALEMBIC_INI_SRC}" "${SERVER_INSTALL_DIR}/alembic.ini"
+    log "alembic.ini installed at ${SERVER_INSTALL_DIR}/alembic.ini"
+
     # ── Database setup ─────────────────────────────────────────────────────
     _setup_database
 
     # ── Alembic migrations ─────────────────────────────────────────────────
     log "Running database migrations"
     SYSWATCH_CONFIG="${SERVER_CONFIG_DIR}/config.yaml" \
+        SYSWATCH_HOME="${SERVER_INSTALL_DIR}" \
         "${SERVER_VENV}/bin/syswatch-server" migrate
     log "Migrations complete"
 
@@ -352,7 +387,8 @@ install_server() {
 _install_postgresql_timescaledb() {
     log "Installing PostgreSQL ${PG_VERSION} + TimescaleDB ${TIMESCALEDB_VERSION}"
 
-    # PostgreSQL official repo
+    # PostgreSQL official repo (PGDG) — needed because Debian's own repos ship
+    # only one PostgreSQL major version per release.
     if ! apt-cache show "postgresql-${PG_VERSION}" &>/dev/null; then
         install -d /usr/share/postgresql-common/pgdg
         curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -360,21 +396,22 @@ _install_postgresql_timescaledb() {
         echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] \
 https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             > /etc/apt/sources.list.d/pgdg.list
+        apt-get update -qq
     fi
 
-    # TimescaleDB repo
-    if [[ ! -f /etc/apt/sources.list.d/timescaledb.list ]]; then
-        curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey \
-            | gpg --dearmor -o /usr/share/keyrings/timescaledb.gpg
-        echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] \
-https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" \
-            > /etc/apt/sources.list.d/timescaledb.list
-    fi
+    apt-get install -y -qq "postgresql-${PG_VERSION}"
 
-    apt-get update -qq
-    apt-get install -y -qq \
-        "postgresql-${PG_VERSION}" \
-        "timescaledb-2-postgresql-${PG_VERSION}"
+    # TimescaleDB: Debian 13 (Trixie) ships timescaledb natively in its own
+    # repos (postgresql-17-timescaledb), so no third-party repo is needed.
+    # The packagecloud.io third-party repo currently fails GPG verification
+    # on Trixie under apt's newer sqv-based signature checking — avoid it.
+    apt-get install -y -qq "postgresql-${PG_VERSION}-timescaledb"
+
+    # timescaledb-tune applies recommended postgresql.conf settings
+    if command -v timescaledb-tune &>/dev/null; then
+        timescaledb-tune --quiet --yes \
+            --pg-config="/usr/lib/postgresql/${PG_VERSION}/bin/pg_config" || true
+    fi
 
     # Tune postgresql.conf for TimescaleDB
     PG_CONF="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
@@ -685,8 +722,14 @@ StartLimitBurst=5
 Type=simple
 User=${SYSWATCH_USER}
 Group=${SYSWATCH_GROUP}
+WorkingDirectory=${SERVER_INSTALL_DIR}
 Environment="SYSWATCH_CONFIG=${SERVER_CONFIG_DIR}/config.yaml"
-ExecStart=${SERVER_VENV}/bin/syswatch-server serve
+Environment="SYSWATCH_HOME=${SERVER_INSTALL_DIR}"
+# syswatch-server-daemon is the actual long-running process (main.py:main).
+# syswatch-server (no -daemon suffix) is the separate management CLI
+# (start/stop/status/logs/migrate/health/open) that shells out to systemctl
+# and must not be used as ExecStart — it has no "serve" subcommand.
+ExecStart=${SERVER_VENV}/bin/syswatch-server-daemon
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
@@ -742,7 +785,7 @@ _configure_grafana() {
           \"database\": \"${PG_DB}\",
           \"user\": \"${PG_USER}\",
           \"secureJsonData\": {\"password\": \"${PG_PASSWORD}\"},
-          \"jsonData\": {\"sslmode\": \"disable\", \"postgresVersion\": 1600, \"timescaledb\": true}
+          \"jsonData\": {\"sslmode\": \"disable\", \"postgresVersion\": $(( ${PG_VERSION} * 100 )), \"timescaledb\": true}
         }" &>/dev/null || warn "Grafana datasource may already exist"
 
     log "Grafana datasource configured"
@@ -785,7 +828,10 @@ _install_cli_shim() {
     cat > /usr/local/bin/syswatch <<EOF
 #!/usr/bin/env bash
 # syswatch CLI — thin wrapper around the installed server venv entrypoint
-exec sudo -u ${SYSWATCH_USER} SYSWATCH_CONFIG=${SERVER_CONFIG_DIR}/config.yaml \\
+exec sudo -u ${SYSWATCH_USER} \\
+    SYSWATCH_CONFIG=${SERVER_CONFIG_DIR}/config.yaml \\
+    SYSWATCH_HOME=${SERVER_INSTALL_DIR} \\
+    SYSWATCH_WEB_URL=http://127.0.0.1:${SERVER_HTTP_PORT} \\
     ${SERVER_VENV}/bin/syswatch-server "\$@"
 EOF
     chmod 755 /usr/local/bin/syswatch

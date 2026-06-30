@@ -39,16 +39,16 @@ async def run(cfg: Config) -> None:
     setup_tracing(cfg)
 
     metrics = MetricsRegistry()
-    start_metrics_server(port=cfg.metrics.port)
+    start_metrics_server(port=cfg.server.metrics_port)
 
     logger.info("Connecting to database...")
     db_pool = await create_pool(cfg)
 
     ca_paths = CertPaths(
-        ca_cert=cfg.grpc.tls.ca_cert,
-        ca_key=cfg.grpc.tls.ca_cert.replace("ca.crt", "ca.key"),
-        server_cert=cfg.grpc.tls.server_cert,
-        server_key=cfg.grpc.tls.server_key,
+        ca_cert=cfg.pki.ca_cert,
+        ca_key=cfg.pki.ca_key,
+        server_cert=cfg.tls.server_cert,
+        server_key=cfg.tls.server_key,
     )
     ca = CertificateAuthority.load(ca_paths)
 
@@ -81,8 +81,8 @@ async def run(cfg: Config) -> None:
 
     uvicorn_config = uvicorn.Config(
         app,
-        host=cfg.web.host,
-        port=cfg.web.port,
+        host=cfg.server.http_host,
+        port=cfg.server.http_port,
         log_level="info",
         access_log=False,
     )
@@ -102,11 +102,11 @@ async def run(cfg: Config) -> None:
 
     logger.info(
         "syswatch-server started: gRPC=%s:%d web=http://%s:%d metrics=:%d",
-        cfg.grpc.host,
-        cfg.grpc.port,
-        cfg.web.host,
-        cfg.web.port,
-        cfg.metrics.port,
+        cfg.server.grpc_host,
+        cfg.server.grpc_port,
+        cfg.server.http_host,
+        cfg.server.http_port,
+        cfg.server.metrics_port,
     )
 
     try:

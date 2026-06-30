@@ -6,7 +6,7 @@ AGENT_PROTO    := syswatch-agent/syswatch_agent/proto
 SERVER_PROTO   := syswatch-server/syswatch_server/proto
 AGENT_PKG      := syswatch-agent
 SERVER_PKG     := syswatch-server
-FRONTEND_DIR   := syswatch-server/syswatch_server/frontend
+FRONTEND_DIR   := syswatch-server/frontend
 DIST_DIR       := dist
 
 # ── Proto ─────────────────────────────────────────────────────────────────────
@@ -58,11 +58,9 @@ build-agent: $(DIST_DIR)
 	uv build $(AGENT_PKG) --out-dir $(DIST_DIR)
 
 build-frontend:
-	@echo "[build] frontend (Jinja2 + static assets)"
-	@# Nothing to compile — Jinja2 templates are served at runtime.
-	@# This target validates that the templates directory is present.
-	test -d $(FRONTEND_DIR)/templates || (echo "ERROR: templates dir missing"; exit 1)
-	test -d $(FRONTEND_DIR)/static   || (echo "ERROR: static dir missing"; exit 1)
+	@echo "[build] frontend (React + Vite)"
+	cd $(FRONTEND_DIR) && npm install && npm run build
+	test -f syswatch-server/syswatch_server/static/index.html || (echo "ERROR: vite build did not produce static/index.html"; exit 1)
 	@echo "[build] frontend ok"
 
 build-server: build-frontend $(DIST_DIR)
