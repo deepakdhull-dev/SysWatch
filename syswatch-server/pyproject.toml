@@ -64,6 +64,7 @@ packages = ["syswatch_server"]
 artifacts = [
     "syswatch_server/static/**",
     "syswatch_server/migrations/**",
+    "syswatch_server/config.yaml",
 ]
 
 [tool.hatch.build.targets.sdist]

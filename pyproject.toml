@@ -1,0 +1,46 @@
+[project]
+name = "syswatch"
+version = "0.1.0"
+description = "Self-hosted, multi-agent Linux infrastructure monitoring platform"
+requires-python = ">=3.13"
+# The root project ships no code of its own — it exists to define the uv
+# workspace and pin shared dev tooling versions across both member packages.
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Root package is not published; this satisfies hatchling for `uv sync`.
+bypass-selection = true
+
+[tool.uv.workspace]
+members = [
+    "syswatch-agent",
+    "syswatch-server",
+]
+
+[tool.uv]
+# Dev tooling shared across both workspace members. Pin here once;
+# member pyproject.toml [project.optional-dependencies.dev] entries
+# should stay compatible with these pins.
+dev-dependencies = [
+    "grpcio-tools>=1.63.0",
+    "mypy>=1.11.0",
+    "ruff>=0.6.0",
+    "types-pyyaml>=6.0.12",
+]
+
+# ── Ruff (workspace-level defaults; member packages may override) ─────────────
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# ── Mypy (workspace-level defaults; member packages may override) ─────────────
+[tool.mypy]
+python_version = "3.13"
+strict = true
