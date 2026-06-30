@@ -75,7 +75,11 @@ esac
 # build` may be run by a different user than whoever ran this bootstrap.
 if ! command -v uv &>/dev/null; then
     log "Installing uv"
-    UV_INSTALL_DIR=/usr/local/bin curl -LsSf https://astral.sh/uv/install.sh | sh
+    # UV_INSTALL_DIR must be set for the `sh` that runs the installer logic
+    # (right side of the pipe) — setting it on `curl` (left side) does
+    # nothing, since a VAR=val prefix only scopes to the single command it
+    # precedes, not across a pipeline.
+    curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
 else
     log "uv already present: $(uv --version)"
 fi
