@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     # gRPC + protobuf (mTLS streaming)
     "grpcio>=1.63.0",
-    "protobuf>=5.27.0",
+    "protobuf>=6.30.0,<7.0.0",
     # Database
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
@@ -49,7 +49,7 @@ syswatch-server-daemon = "syswatch_server.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "grpcio-tools>=1.63.0",   # proto generation (build-time)
+    "grpcio-tools>=1.63.0,<1.82.0",   # proto generation (build-time); cap matches protobuf<7 pin above
     "mypy>=1.11.0",
     "ruff>=0.6.0",
     "types-pyyaml>=6.0.12",
