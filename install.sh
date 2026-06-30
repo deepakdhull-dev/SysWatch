@@ -192,7 +192,7 @@ install_agent() {
 
     # ── Venv + wheel ───────────────────────────────────────────────────────
     log "Creating virtualenv"
-    "${PYTHON313_BIN}" -m venv "${AGENT_VENV}"
+    "${PYTHON313_BIN}" -m venv --clear "${AGENT_VENV}"
     "${AGENT_VENV}/bin/pip" install --quiet --upgrade pip
 
     log "Installing agent wheel"
@@ -323,7 +323,7 @@ install_server() {
     # password using passlib/bcrypt, which only exists once the server
     # wheel (and its dependencies) are installed into this venv.
     log "Creating server virtualenv"
-    "${PYTHON313_BIN}" -m venv "${SERVER_VENV}"
+    "${PYTHON313_BIN}" -m venv --clear "${SERVER_VENV}"
     "${SERVER_VENV}/bin/pip" install --quiet --upgrade pip
 
     log "Installing server wheel"
