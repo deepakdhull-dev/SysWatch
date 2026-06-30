@@ -23,7 +23,11 @@ SYSWATCH_USER="syswatch"
 SYSWATCH_GROUP="syswatch"
 AGENT_INSTALL_DIR="/opt/syswatch-agent"
 SERVER_INSTALL_DIR="/opt/syswatch-server"
-AGENT_CONFIG_DIR="/etc/syswatch/agent"
+# These two MUST match syswatch_agent/config.py's load_config() defaults and
+# syswatch_agent/cli.py's CONFIG_PATH/CERTS_DIR — the agent daemon hardcodes
+# them and takes no --config flag.
+AGENT_CONFIG_PATH="/etc/syswatch/agent.yaml"
+AGENT_CERTS_DIR="/etc/syswatch/certs"
 SERVER_CONFIG_DIR="/etc/syswatch/server"
 PKI_DIR="/etc/syswatch/pki"
 LOG_DIR="/var/log/syswatch"
@@ -147,36 +151,42 @@ install_agent() {
     ensure_python313
 
     # ── Directories ────────────────────────────────────────────────────────
+    # Paths here MUST match syswatch_agent/config.py's load_config() defaults
+    # and syswatch_agent/cli.py's CONFIG_PATH/CERTS_DIR constants exactly —
+    # the agent code hardcodes these, it does not take a --config flag.
     create_system_user
     install -d -m 750 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
         "${AGENT_INSTALL_DIR}" \
-        "${AGENT_CONFIG_DIR}" \
-        "${PKI_DIR}/agent" \
+        "${AGENT_CERTS_DIR}" \
         "${LOG_DIR}"
+    install -d -m 750 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
+        "$(dirname "${AGENT_CONFIG_PATH}")"
 
     # ── Extract bundle ─────────────────────────────────────────────────────
     log "Extracting bundle.zip"
     TMPBUNDLE="${TMPBUNDLE:-$(mktemp -d)}"
     unzip -q "${BUNDLE_PATH}" -d "${TMPBUNDLE}" 2>/dev/null || true
 
-    # Expected bundle layout:
-    #   ca.crt
-    #   agent.crt
-    #   agent.key
+    # Expected bundle layout (matches syswatch_agent/cli.py's EXPECTED_ZIP_FILES):
     #   agent.yaml
+    #   ca.crt
+    #   client.crt
+    #   client.key
     #   syswatch_agent-*.whl  (optional, may be supplied separately)
 
-    for cert_file in ca.crt agent.crt agent.key; do
-        [[ -f "${TMPBUNDLE}/${cert_file}" ]] \
-            || die "bundle.zip missing: ${cert_file}"
-        install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
-            "${TMPBUNDLE}/${cert_file}" "${PKI_DIR}/agent/${cert_file}"
-    done
+    [[ -f "${TMPBUNDLE}/ca.crt" ]] || die "bundle.zip missing: ca.crt"
+    [[ -f "${TMPBUNDLE}/client.crt" ]] || die "bundle.zip missing: client.crt"
+    [[ -f "${TMPBUNDLE}/client.key" ]] || die "bundle.zip missing: client.key"
+    [[ -f "${TMPBUNDLE}/agent.yaml" ]] || die "bundle.zip missing: agent.yaml"
 
-    [[ -f "${TMPBUNDLE}/agent.yaml" ]] \
-        || die "bundle.zip missing: agent.yaml"
     install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
-        "${TMPBUNDLE}/agent.yaml" "${AGENT_CONFIG_DIR}/agent.yaml"
+        "${TMPBUNDLE}/ca.crt" "${AGENT_CERTS_DIR}/ca.crt"
+    install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
+        "${TMPBUNDLE}/client.crt" "${AGENT_CERTS_DIR}/client.crt"
+    install -m 600 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
+        "${TMPBUNDLE}/client.key" "${AGENT_CERTS_DIR}/client.key"
+    install -m 640 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
+        "${TMPBUNDLE}/agent.yaml" "${AGENT_CONFIG_PATH}"
 
     log "Certs and config placed"
 
@@ -191,6 +201,10 @@ install_agent() {
     chown -R "${SYSWATCH_USER}:${SYSWATCH_GROUP}" "${AGENT_INSTALL_DIR}"
 
     # ── Systemd unit ───────────────────────────────────────────────────────
+    # syswatch-agent-daemon is the actual long-running process (main.py:main).
+    # It takes no --config flag — it hardcodes /etc/syswatch/agent.yaml.
+    # syswatch-agent (no -daemon suffix) is the separate management CLI
+    # (start/stop/status/update/service) and must not be used as ExecStart.
     log "Installing systemd unit"
     cat > /etc/systemd/system/syswatch-agent.service <<EOF
 [Unit]
@@ -204,7 +218,7 @@ StartLimitBurst=5
 Type=simple
 User=${SYSWATCH_USER}
 Group=${SYSWATCH_GROUP}
-ExecStart=${AGENT_VENV}/bin/syswatch-agent --config ${AGENT_CONFIG_DIR}/agent.yaml
+ExecStart=${AGENT_VENV}/bin/syswatch-agent-daemon
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
@@ -232,8 +246,8 @@ EOF
     log "Agent install complete."
     log "Status:  systemctl status syswatch-agent"
     log "Logs:    journalctl -u syswatch-agent -f"
-    log "Config:  ${AGENT_CONFIG_DIR}/agent.yaml"
-    log "Certs:   ${PKI_DIR}/agent/"
+    log "Config:  ${AGENT_CONFIG_PATH}"
+    log "Certs:   ${AGENT_CERTS_DIR}/"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -302,10 +316,10 @@ install_server() {
         "${SERVER_CONFIG_DIR}" \
         "${LOG_DIR}"
 
-    # ── Server config ──────────────────────────────────────────────────────
-    _write_server_config
-
     # ── Venv + wheel ───────────────────────────────────────────────────────
+    # Must happen BEFORE _write_server_config: that step hashes the admin
+    # password using passlib/bcrypt, which only exists once the server
+    # wheel (and its dependencies) are installed into this venv.
     log "Creating server virtualenv"
     "${PYTHON313_BIN}" -m venv "${SERVER_VENV}"
     "${SERVER_VENV}/bin/pip" install --quiet --upgrade pip
@@ -314,6 +328,9 @@ install_server() {
     install_pip_package "${SERVER_VENV}" "${SERVER_WHEEL}"
 
     chown -R "${SYSWATCH_USER}:${SYSWATCH_GROUP}" "${SERVER_INSTALL_DIR}"
+
+    # ── Server config ──────────────────────────────────────────────────────
+    _write_server_config
 
     # ── alembic.ini ───────────────────────────────────────────────────────
     # alembic.ini is not part of the wheel's package data (it's a project-root
@@ -461,7 +478,10 @@ _install_prometheus() {
     fi
 
     install -d -m 755 /etc/prometheus /var/lib/prometheus
-    useradd --system --no-create-home --shell /usr/sbin/nologin prometheus 2>/dev/null || true
+    if ! id prometheus &>/dev/null; then
+        useradd --system --no-create-home --shell /usr/sbin/nologin --user-group prometheus \
+            || die "Failed to create system user 'prometheus'"
+    fi
     chown prometheus:prometheus /var/lib/prometheus
 
     cat > /etc/systemd/system/prometheus.service <<EOF
@@ -501,7 +521,10 @@ _install_alertmanager() {
     fi
 
     install -d -m 755 /etc/alertmanager /var/lib/alertmanager
-    useradd --system --no-create-home --shell /usr/sbin/nologin alertmanager 2>/dev/null || true
+    if ! id alertmanager &>/dev/null; then
+        useradd --system --no-create-home --shell /usr/sbin/nologin --user-group alertmanager \
+            || die "Failed to create system user 'alertmanager'"
+    fi
     chown alertmanager:alertmanager /var/lib/alertmanager
 
     # Minimal Alertmanager config — operator customises routes/receivers post-install
