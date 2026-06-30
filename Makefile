@@ -53,7 +53,7 @@ lint:
 $(DIST_DIR):
 	mkdir -p $(DIST_DIR)
 
-build-agent: $(DIST_DIR)
+build-agent: proto $(DIST_DIR)
 	@echo "[build] agent wheel"
 	uv build $(AGENT_PKG) --out-dir $(DIST_DIR)
 
@@ -63,7 +63,7 @@ build-frontend:
 	test -f syswatch-server/syswatch_server/static/index.html || (echo "ERROR: vite build did not produce static/index.html"; exit 1)
 	@echo "[build] frontend ok"
 
-build-server: build-frontend $(DIST_DIR)
+build-server: proto build-frontend $(DIST_DIR)
 	@echo "[build] server wheel"
 	uv build $(SERVER_PKG) --out-dir $(DIST_DIR)
 

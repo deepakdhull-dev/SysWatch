@@ -416,7 +416,7 @@ install_server() {
     echo ""
     echo "  Config:        ${SERVER_CONFIG_DIR}/config.yaml"
     echo "  PKI:           ${PKI_DIR}/server/"
-    echo "  Generate bundle: syswatch bundle --name <hostname>"
+    echo "  Add agents:    Open the dashboard → Add Agent (downloads bundle.zip)"
     echo ""
     log "Logs: journalctl -u syswatch-server -f"
 }
