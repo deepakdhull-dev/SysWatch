@@ -78,12 +78,18 @@ artifacts = [
 ]
 
 [tool.hatch.build.targets.sdist]
-# sdist excludes generated artifacts — consumers regenerate them.
+# NOTE: proto/*.py and static/* (built frontend) are deliberately NOT
+# excluded here, even though both are untracked in git / build-time
+# generated. `uv build` (and `python -m build` without --wheel) builds the
+# wheel FROM the sdist, not directly from the source tree — so if the sdist
+# excludes these, the wheel-build stage has nothing to pull them from, and
+# `[tool.hatch.build.targets.wheel].artifacts` below can't force-include
+# files that were never in the sdist to begin with. Confirmed via a real
+# `uv build` reproduction, not an assumption: omitting proto files this way
+# produced a wheel that crashed at import time with a misleading
+# circular-import error; the same mechanism would silently ship a server
+# with no dashboard UI for static/*.
 exclude = [
-    "syswatch_server/proto/syswatch_pb2.py",
-    "syswatch_server/proto/syswatch_pb2_grpc.py",
-    "syswatch_server/static/assets",
-    "syswatch_server/static/index.html",
     "frontend/node_modules",
 ]
 
