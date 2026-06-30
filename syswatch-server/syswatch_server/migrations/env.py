@@ -108,7 +108,10 @@ async def run_migrations_online() -> None:
 def _redact_dsn(dsn: str) -> str:
     import re
 
-    return re.sub(r"(?<=://[^:]+:)[^@]+(?=@)", "***", dsn)
+    # Variable-width lookbehind ((?<=[^:]+:)) is rejected by Python's re
+    # module — lookbehind patterns must be fixed-width. Use capture groups
+    # instead, which achieves the same redaction without that restriction.
+    return re.sub(r"(://[^:]+:)[^@]+(@)", r"\1***\2", dsn)
 
 
 if context.is_offline_mode():
