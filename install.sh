@@ -842,6 +842,38 @@ EOF
 
 # ── Grafana: datasource + dashboard ───────────────────────────────────────────
 _configure_grafana() {
+    log "Configuring Grafana for dashboard embedding"
+
+    # The syswatch web dashboard embeds Grafana panels in an <iframe>. Grafana
+    # blocks all iframe embedding by default (X-Frame-Options/CSP via
+    # allow_embedding=false) and requires an authenticated session, which the
+    # iframe has no mechanism to pass — without both settings below the
+    # browser refuses to render the frame at all (seen as "Firefox/Chrome
+    # can't open this page" with no server-side error, since Grafana itself
+    # is healthy; this is a pure browser-side framing/auth block).
+    GRAFANA_INI="/etc/grafana/grafana.ini"
+    if [[ -f "${GRAFANA_INI}" ]]; then
+        if ! grep -q "^\[security\]" "${GRAFANA_INI}"; then
+            echo "" >> "${GRAFANA_INI}"
+            echo "[security]" >> "${GRAFANA_INI}"
+        fi
+        if ! grep -q "^allow_embedding" "${GRAFANA_INI}"; then
+            sed -i '/^\[security\]/a allow_embedding = true' "${GRAFANA_INI}"
+        fi
+
+        if ! grep -q "^\[auth.anonymous\]" "${GRAFANA_INI}"; then
+            cat >> "${GRAFANA_INI}" <<'EOF'
+
+[auth.anonymous]
+enabled = true
+org_role = Viewer
+EOF
+        fi
+        log "Grafana embedding + anonymous viewer access configured"
+    else
+        log "WARNING: ${GRAFANA_INI} not found — skipping embed config, dashboard iframe will not render"
+    fi
+
     log "Configuring Grafana datasource"
 
     # Wait for Grafana to start
