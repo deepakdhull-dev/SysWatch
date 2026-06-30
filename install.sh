@@ -135,7 +135,7 @@ install_agent() {
         # Check if wheel is embedded in bundle
         TMPBUNDLE=$(mktemp -d)
         trap 'rm -rf "${TMPBUNDLE}"' EXIT
-        unzip -q "${BUNDLE_PATH}" -d "${TMPBUNDLE}"
+        unzip -oq "${BUNDLE_PATH}" -d "${TMPBUNDLE}"
 
         AGENT_WHEEL=$(find "${TMPBUNDLE}" -name "syswatch_agent-*.whl" | head -1)
         if [[ -z "${AGENT_WHEEL}" ]]; then
@@ -165,7 +165,7 @@ install_agent() {
     # ── Extract bundle ─────────────────────────────────────────────────────
     log "Extracting bundle.zip"
     TMPBUNDLE="${TMPBUNDLE:-$(mktemp -d)}"
-    unzip -q "${BUNDLE_PATH}" -d "${TMPBUNDLE}" 2>/dev/null || true
+    unzip -oq "${BUNDLE_PATH}" -d "${TMPBUNDLE}" 2>/dev/null || true
 
     # Expected bundle layout (matches syswatch_agent/cli.py's EXPECTED_ZIP_FILES):
     #   agent.yaml
