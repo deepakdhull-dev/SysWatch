@@ -165,8 +165,18 @@ def upgrade() -> None:
 
     op.execute(
         """
-        CREATE MATERIALIZED VIEW IF NOT EXISTS metrics_hourly
-        WITH (timescaledb.continuous) AS
+        -- NOTE: TimescaleDB continuous aggregates (timescaledb.continuous)
+        -- require the Timescale/Community license tier. Debian's own
+        -- postgresql-*-timescaledb package ships the Apache 2.0 edition,
+        -- which does not include this feature — attempting to create one
+        -- raises asyncpg.exceptions.FeatureNotSupportedError. A plain view
+        -- achieves the same query (hourly rollup via time_bucket, which IS
+        -- Apache-licensed) computed live at query time instead of
+        -- incrementally materialized in the background. For this dataset's
+        -- scale this is an acceptable tradeoff; if a Timescale-licensed
+        -- install becomes available later, this can be swapped back to a
+        -- real continuous aggregate.
+        CREATE OR REPLACE VIEW metrics_hourly AS
         SELECT
             time_bucket('1 hour', time)  AS bucket,
             agent_id,
@@ -179,19 +189,6 @@ def upgrade() -> None:
             SUM(frames_dropped)          AS total_dropped
         FROM metrics
         GROUP BY bucket, agent_id
-        WITH NO DATA
-        """
-    )
-
-    op.execute(
-        """
-        SELECT add_continuous_aggregate_policy(
-            'metrics_hourly',
-            start_offset      => INTERVAL '3 hours',
-            end_offset        => INTERVAL '1 minute',
-            schedule_interval => INTERVAL '1 hour',
-            if_not_exists     => TRUE
-        )
         """
     )
 
@@ -229,7 +226,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
 
-    op.execute("DROP MATERIALIZED VIEW IF EXISTS metrics_hourly CASCADE")
+    op.execute("DROP VIEW IF EXISTS metrics_hourly CASCADE")
 
     for table in ("metrics_service", "metrics_network", "metrics_disk", "metrics"):
         op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
