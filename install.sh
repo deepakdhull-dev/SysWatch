@@ -303,18 +303,20 @@ install_server() {
     # ── Alertmanager ──────────────────────────────────────────────────────
     _install_alertmanager
 
-    # ── PKI: CA + server cert ──────────────────────────────────────────────
-    _generate_pki
-
-    # ── JWT keys ───────────────────────────────────────────────────────────
-    _generate_jwt_keys
-
     # ── Directories + user ────────────────────────────────────────────────
+    # Must happen BEFORE _generate_pki and _generate_jwt_keys — both chown
+    # generated files to the syswatch user, which must already exist.
     create_system_user
     install -d -m 750 -o "${SYSWATCH_USER}" -g "${SYSWATCH_GROUP}" \
         "${SERVER_INSTALL_DIR}" \
         "${SERVER_CONFIG_DIR}" \
         "${LOG_DIR}"
+
+    # ── PKI: CA + server cert ──────────────────────────────────────────────
+    _generate_pki
+
+    # ── JWT keys ───────────────────────────────────────────────────────────
+    _generate_jwt_keys
 
     # ── Venv + wheel ───────────────────────────────────────────────────────
     # Must happen BEFORE _write_server_config: that step hashes the admin
