@@ -72,6 +72,15 @@ async def create_pool(cfg: Any) -> asyncpg.Pool:
         init=_init_connection,
         command_timeout=float(db_cfg.pool_timeout),
         max_inactive_connection_lifetime=300.0,
+        # Explicitly disabled: this is a local, password-authenticated
+        # connection (mTLS secures agent<->server gRPC, not this DB link).
+        # Without this, asyncpg falls back to libpq's default SSL probing,
+        # which checks ~/.postgresql/postgresql.{crt,key} for the OS user
+        # running the process — any stray file there (e.g. left over from
+        # manual debugging, or owned by the wrong user) causes a
+        # PermissionError at connection time that has nothing to do with
+        # this application's actual configuration.
+        ssl="disable",
     )
 
     logger.info("asyncpg pool created (%d initial connections)", db_cfg.pool_size)
