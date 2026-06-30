@@ -98,6 +98,6 @@ class MetricsRegistry:
 def start_metrics_server(port: int = DEFAULT_METRICS_PORT) -> None:
     start_http_server(port)
     logger.info(
-        port,
+        "Prometheus metrics server listening on port %d",
         port,
     )
