@@ -896,7 +896,7 @@ EOF
     GRAFANA_AUTH="admin:syswatch"
 
     # Add TimescaleDB / PostgreSQL datasource
-    curl -sf -X POST "${GRAFANA_API}/datasources" \
+    DS_RESPONSE=$(curl -sf -X POST "${GRAFANA_API}/datasources" \
         -u "${GRAFANA_AUTH}" \
         -H "Content-Type: application/json" \
         -d "{
@@ -907,7 +907,58 @@ EOF
           \"user\": \"${PG_USER}\",
           \"secureJsonData\": {\"password\": \"${PG_PASSWORD}\"},
           \"jsonData\": {\"sslmode\": \"disable\", \"postgresVersion\": $(( ${PG_VERSION} * 100 )), \"timescaledb\": true}
-        }" &>/dev/null || warn "Grafana datasource may already exist"
+        }" 2>/dev/null) || true
+
+    if [[ -z "${DS_RESPONSE}" ]]; then
+        warn "Grafana datasource may already exist — looking it up"
+        DS_RESPONSE=$(curl -sf "${GRAFANA_API}/datasources/name/syswatch-timescaledb" \
+            -u "${GRAFANA_AUTH}" 2>/dev/null) || true
+    fi
+
+    DS_UID=$(echo "${DS_RESPONSE}" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    # POST response wraps it under 'datasource'; GET-by-name returns it flat
+    ds = data.get('datasource', data)
+    print(ds.get('uid', ''))
+except Exception:
+    print('')
+")
+
+    if [[ -z "${DS_UID}" ]]; then
+        warn "Could not determine Grafana datasource UID — skipping dashboard import. Datasource panels will need to be linked manually in the Grafana UI."
+    else
+        log "Grafana datasource UID: ${DS_UID}"
+
+        # ── Import the syswatch dashboard ────────────────────────────────────
+        DASHBOARD_JSON_SRC=""
+        for candidate in \
+            "$(dirname "${BASH_SOURCE[0]}")/syswatch-server/data/grafana_dashboard.json"
+        do
+            [[ -f "${candidate}" ]] && DASHBOARD_JSON_SRC="${candidate}"
+        done
+
+        if [[ -z "${DASHBOARD_JSON_SRC}" ]]; then
+            warn "grafana_dashboard.json not found next to install.sh — skipping dashboard import"
+        else
+            DASHBOARD_PAYLOAD=$(python3 -c "
+import json
+with open('${DASHBOARD_JSON_SRC}') as f:
+    text = f.read()
+text = text.replace('\${DS_SYSWATCH}', '${DS_UID}')
+dashboard = json.loads(text)
+payload = {'dashboard': dashboard, 'overwrite': True, 'folderId': 0}
+print(json.dumps(payload))
+")
+            curl -sf -X POST "${GRAFANA_API}/dashboards/db" \
+                -u "${GRAFANA_AUTH}" \
+                -H "Content-Type: application/json" \
+                -d "${DASHBOARD_PAYLOAD}" \
+                &>/dev/null && log "syswatch dashboard imported (uid=syswatch-main)" \
+                || warn "Dashboard import failed — the embedded panel will show Grafana's home page instead"
+        fi
+    fi
 
     log "Grafana datasource configured"
 }

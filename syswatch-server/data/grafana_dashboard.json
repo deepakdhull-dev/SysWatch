@@ -1,0 +1,116 @@
+{
+  "uid": "syswatch-main",
+  "title": "syswatch",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "agent_id",
+        "type": "query",
+        "label": "Agent",
+        "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+        "query": "SELECT agent_id FROM agents ORDER BY agent_id",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "CPU %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", cpu_pct AS \"cpu_pct\" FROM metrics WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "RAM %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", ram_pct AS \"ram_pct\" FROM metrics WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Load Average (1m/5m/15m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", load_1m, load_5m, load_15m FROM metrics WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Disk Usage % by Mount",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", pct AS \"pct\", mount_point FROM metrics_disk WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Network Throughput (bytes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", bytes_in, bytes_out, interface_name FROM metrics_network WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Frames Dropped (since last connect)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "postgres", "uid": "${DS_SYSWATCH}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT time AS \"time\", frames_dropped FROM metrics WHERE agent_id = '$agent_id' AND $__timeFilter(time) ORDER BY time",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
