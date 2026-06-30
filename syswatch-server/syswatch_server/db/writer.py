@@ -22,17 +22,17 @@ MetricRow = tuple[
     str,
     float,
     float,
-    int,
-    int,
     float,
-    int,
-    int,
+    float,
+    float,
+    float,
+    float,
     float,
     float,
     float,
     int,
 ]
-DiskRow = tuple[str, datetime.datetime, str, str, float, int, int]
+DiskRow = tuple[str, datetime.datetime, str, str, float, float, float]
 NetworkRow = tuple[str, datetime.datetime, str, str, int, int, int, int, int, int]
 ServiceRow = tuple[str, datetime.datetime, str, str, bool]
 

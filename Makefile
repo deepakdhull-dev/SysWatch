@@ -12,12 +12,12 @@ DIST_DIR       := dist
 # ── Proto ─────────────────────────────────────────────────────────────────────
 proto:
 	@echo "[proto] generating from $(PROTO_SRC)"
-	python -m grpc_tools.protoc \
+	python3 -m grpc_tools.protoc \
 		--proto_path=proto \
 		--python_out=$(AGENT_PROTO) \
 		--grpc_python_out=$(AGENT_PROTO) \
 		syswatch.proto
-	python -m grpc_tools.protoc \
+	python3 -m grpc_tools.protoc \
 		--proto_path=proto \
 		--python_out=$(SERVER_PROTO) \
 		--grpc_python_out=$(SERVER_PROTO) \

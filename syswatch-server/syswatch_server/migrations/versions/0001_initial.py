@@ -35,11 +35,11 @@ def upgrade() -> None:
             frame_id        TEXT        NOT NULL,
             cpu_pct         REAL        NOT NULL,
             ram_pct         REAL        NOT NULL,
-            ram_used        BIGINT      NOT NULL,
-            ram_total       BIGINT      NOT NULL,
+            ram_used        REAL        NOT NULL,
+            ram_total       REAL        NOT NULL,
             swap_pct        REAL        NOT NULL,
-            swap_used       BIGINT      NOT NULL,
-            swap_total      BIGINT      NOT NULL,
+            swap_used       REAL        NOT NULL,
+            swap_total      REAL        NOT NULL,
             load_1m         REAL        NOT NULL,
             load_5m         REAL        NOT NULL,
             load_15m        REAL        NOT NULL,
@@ -74,8 +74,8 @@ def upgrade() -> None:
             frame_id    TEXT        NOT NULL,
             mount_point TEXT        NOT NULL,
             pct         REAL        NOT NULL,
-            used        BIGINT      NOT NULL,
-            total       BIGINT      NOT NULL
+            used        REAL        NOT NULL,
+            total       REAL        NOT NULL
         )
         """
     )

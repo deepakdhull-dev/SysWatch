@@ -136,7 +136,7 @@ class MetricServicer(syswatch_pb2_grpc.MetricServiceServicer):
         self,
         request_iterator: AsyncIterator[syswatch_pb2.MetricFrame],
         context: grpc.aio.ServicerContext,
-    ) -> AsyncIterator[syswatch_pb2.FrameAck]:
+    ) -> AsyncIterator[syswatch_pb2.Ack]:
         peer = context.peer()
 
         agent_id: str | None = None
@@ -211,7 +211,7 @@ class MetricServicer(syswatch_pb2_grpc.MetricServiceServicer):
                         exc,
                     )
 
-                yield syswatch_pb2.FrameAck(
+                yield syswatch_pb2.Ack(
                     frame_id=frame.frame_id,
                     stored=stored,
                     received_at=int(time.time() * 1000),
