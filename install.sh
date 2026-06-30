@@ -704,6 +704,13 @@ _write_server_config() {
 
     PG_PASSWORD="${PG_PASSWORD:-$(cat "${SERVER_CONFIG_DIR}/.db_password" 2>/dev/null || echo 'CHANGE_ME')}"
 
+    # grafana.url is embedded client-side as the iframe src for the dashboard
+    # panel. "localhost" resolves on the browser's machine, not this host —
+    # any remote client gets a dead/wrong iframe target. Must be the host's
+    # real reachable IP, computed once here so all later logic uses it.
+    SERVER_IP="$(hostname -I | awk '{print $1}')"
+    [[ -n "${SERVER_IP}" ]] || die "Could not determine server IP via 'hostname -I' — set it manually in config.yaml after install"
+
     # Hash admin password (bcrypt via the just-installed server venv's passlib)
     ADMIN_HASH=$("${SERVER_VENV}/bin/python" -c "
 import sys
@@ -742,6 +749,7 @@ print(bcrypt.hash(sys.argv[1]))
         -e "s#/etc/syswatch/server/jwt/jwt.pub#${SERVER_CONFIG_DIR}/jwt/jwt.pub#" \
         -e "s#admin_username: \"admin\"#admin_username: \"${ADMIN_USERNAME}\"#" \
         -e "s#admin_password_hash: \"\$2b\$12\$CHANGEME\"#admin_password_hash: \"${ADMIN_HASH}\"#" \
+        -e "s#url: \"http://localhost:3000\"#url: \"http://${SERVER_IP}:${GRAFANA_PORT}\"#" \
         "${TEMPLATE}" > "${SERVER_CONFIG_DIR}/config.yaml"
 
     chmod 640 "${SERVER_CONFIG_DIR}/config.yaml"
@@ -861,7 +869,20 @@ _configure_grafana() {
             sed -i '/^\[security\]/a allow_embedding = true' "${GRAFANA_INI}"
         fi
 
-        if ! grep -q "^\[auth.anonymous\]" "${GRAFANA_INI}"; then
+        # NOTE: the stock grafana.ini ships a [auth.anonymous] header by
+        # default with its keys commented out (;enabled = false, etc). A
+        # presence check on the header alone always finds it and skips this
+        # block, leaving anonymous access disabled with no error. Activate
+        # the existing commented keys in place; if the header is genuinely
+        # absent (non-stock config), append a fresh active block instead.
+        if grep -q "^\[auth.anonymous\]" "${GRAFANA_INI}"; then
+            sed -i '/^\[auth.anonymous\]/,/^\[/{
+                s/^;\?enabled[[:space:]]*=.*/enabled = true/
+                s/^;org_role[[:space:]]*=.*/org_role = Viewer/
+            }' "${GRAFANA_INI}"
+            grep -q "^org_role[[:space:]]*= Viewer" "${GRAFANA_INI}" || \
+                sed -i '/^\[auth.anonymous\]/a org_role = Viewer' "${GRAFANA_INI}"
+        else
             cat >> "${GRAFANA_INI}" <<'EOF'
 
 [auth.anonymous]
@@ -895,22 +916,38 @@ EOF
 
     GRAFANA_AUTH="admin:syswatch"
 
-    # Add TimescaleDB / PostgreSQL datasource
+    # Add TimescaleDB / PostgreSQL datasource. Built via python3 -c rather
+    # than inline bash string interpolation: bash interpolation of PG_PASSWORD
+    # into a hand-escaped JSON string breaks if the password contains a
+    # quote/backslash, and silently produces malformed JSON. "access":"proxy"
+    # is REQUIRED by Grafana's API — omitting it returns 400 "bad request
+    # data", which curl -sf swallows into an empty DS_RESPONSE, which the
+    # fallback below then misreports as "datasource may already exist".
+    DS_PAYLOAD=$(python3 -c "
+import json
+print(json.dumps({
+    'name': 'syswatch-timescaledb',
+    'type': 'postgres',
+    'access': 'proxy',
+    'url': 'localhost:5432',
+    'database': '${PG_DB}',
+    'user': '${PG_USER}',
+    'secureJsonData': {'password': '''${PG_PASSWORD}'''},
+    'jsonData': {
+        'sslmode': 'disable',
+        'postgresVersion': $(( PG_VERSION * 100 )),
+        'timescaledb': True,
+    },
+}))
+")
+
     DS_RESPONSE=$(curl -sf -X POST "${GRAFANA_API}/datasources" \
         -u "${GRAFANA_AUTH}" \
         -H "Content-Type: application/json" \
-        -d "{
-          \"name\": \"syswatch-timescaledb\",
-          \"type\": \"postgres\",
-          \"url\": \"localhost:5432\",
-          \"database\": \"${PG_DB}\",
-          \"user\": \"${PG_USER}\",
-          \"secureJsonData\": {\"password\": \"${PG_PASSWORD}\"},
-          \"jsonData\": {\"sslmode\": \"disable\", \"postgresVersion\": $(( ${PG_VERSION} * 100 )), \"timescaledb\": true}
-        }" 2>/dev/null) || true
+        -d "${DS_PAYLOAD}" 2>/dev/null) || true
 
     if [[ -z "${DS_RESPONSE}" ]]; then
-        warn "Grafana datasource may already exist — looking it up"
+        warn "Grafana datasource creation failed or already exists — looking it up"
         DS_RESPONSE=$(curl -sf "${GRAFANA_API}/datasources/name/syswatch-timescaledb" \
             -u "${GRAFANA_AUTH}" 2>/dev/null) || true
     fi
