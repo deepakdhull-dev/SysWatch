@@ -374,29 +374,20 @@ syswatch/
 
 Known failure modes and their fixes.
 
-**`./install.sh` or `./bootstrap-build-env.sh` gives "command not found" or "permission denied"**
-The script isn't marked executable on that machine (permissions don't survive some transfer methods, e.g. certain zip/scp flows). Fix: `sudo chmod +x install.sh bootstrap-build-env.sh`, then run again with `./install.sh` / `./bootstrap-build-env.sh`.
+- **`./install.sh` or `./bootstrap-build-env.sh` gives "command not found" or "permission denied"** — The script isn't marked executable on that machine (permissions don't survive some transfer methods, e.g. certain zip/scp flows). Fix: `sudo chmod +x install.sh bootstrap-build-env.sh`, then run again with `./install.sh` / `./bootstrap-build-env.sh`.
 
-**Grafana iframe doesn't load / blank panel on the dashboard**
-Some browsers block third-party iframes by default (Safari ITP, Firefox Enhanced Tracking Protection, or strict cookie/frame policies), or the browser blocks mixed content if the dashboard is served over HTTPS but Grafana isn't. `install.sh` sets `allow_embedding = true` and enables anonymous viewer auth on the server side, but that only permits framing — it doesn't override the client browser's own framing restrictions.
-Fix: either allow embedding/third-party frames for the dashboard's origin in the browser's site settings, or use the "Open in new tab" link next to the embedded panel to view the Grafana dashboard directly instead of through the iframe.
+- **Grafana iframe doesn't load / blank panel on the dashboard** — Some browsers block third-party iframes by default (Safari ITP, Firefox Enhanced Tracking Protection, or strict cookie/frame policies), or the browser blocks mixed content if the dashboard is served over HTTPS but Grafana isn't. `install.sh` sets `allow_embedding = true` and enables anonymous viewer auth on the server side, but that only permits framing — it doesn't override the client browser's own framing restrictions. Fix: either allow embedding/third-party frames for the dashboard's origin in the browser's site settings, or use the "Open in new tab" link next to the embedded panel to view the Grafana dashboard directly instead of through the iframe.
 
-**Agent shows offline in the dashboard after install**
-Usually a network path issue between agent and server on port `50051` (gRPC), not a config problem. Check with `nc -zv <server-ip> 50051` from the agent machine. If that fails, check firewall rules on the server (`nft list ruleset` or `ufw status`) — the installer does not open firewall ports automatically.
+- **Agent shows offline in the dashboard after install** — Usually a network path issue between agent and server on port `50051` (gRPC), not a config problem. Check with `nc -zv <server-ip> 50051` from the agent machine. If that fails, check firewall rules on the server (`nft list ruleset` or `ufw status`) — the installer does not open firewall ports automatically.
 
-**`syswatch-server migrate` or install fails at the Alembic step**
-Usually means `alembic.ini`'s `script_location` was not patched correctly, or the wheel didn't ship `migrations/` as package data. Check `${SERVER_INSTALL_DIR}/alembic.ini` for a `script_location` pointing into the venv's `site-packages/syswatch_server/migrations`. If the directory doesn't exist, rebuild the server wheel — `make build-server` — and confirm `migrations/` is included.
+- **`syswatch-server migrate` or install fails at the Alembic step** — Usually means `alembic.ini`'s `script_location` was not patched correctly, or the wheel didn't ship `migrations/` as package data. Check `${SERVER_INSTALL_DIR}/alembic.ini` for a `script_location` pointing into the venv's `site-packages/syswatch_server/migrations`. If the directory doesn't exist, rebuild the server wheel — `make build-server` — and confirm `migrations/` is included.
 
-**Grafana datasource created but panels show "no default database configured"**
-Means `jsonData.database` wasn't set on the datasource, only the legacy top-level `database` field. `install.sh` sets both correctly; if this occurs on a manually created datasource, add `database` inside `jsonData` in Grafana's datasource settings, not just the top-level field.
+- **Grafana datasource created but panels show "no default database configured"** — Means `jsonData.database` wasn't set on the datasource, only the legacy top-level `database` field. `install.sh` sets both correctly; if this occurs on a manually created datasource, add `database` inside `jsonData` in Grafana's datasource settings, not just the top-level field.
 
-**DNS resolution breaks after a suspend/resume cycle or inside a container-based dev environment (Podman/Distrobox)**
-`systemd-resolved` can crash or detach from its socket after suspend, or lose forwarding when a Podman/Distrobox network namespace changes. Symptom: `Temporary failure in name resolution`. Fix: `systemctl restart systemd-resolved`, and if using Distrobox, re-enter the container after host network changes rather than assuming the existing session's resolver state is still valid.
+- **DNS resolution breaks after a suspend/resume cycle or inside a container-based dev environment (Podman/Distrobox)** — `systemd-resolved` can crash or detach from its socket after suspend, or lose forwarding when a Podman/Distrobox network namespace changes. Symptom: `Temporary failure in name resolution`. Fix: `systemctl restart systemd-resolved`, and if using Distrobox, re-enter the container after host network changes rather than assuming the existing session's resolver state is still valid.
 
-**`install.sh server` prompts fail or hang on a fresh Debian 13 machine**
-Check `apt-get update` succeeded and that the PGDG and Grafana APT repo GPG keys were added correctly — a stale or missing keyring blocks `apt-get install` silently in `-qq` mode. Run the equivalent `apt-get` commands manually without `-qq` to see the real error.
+- **`install.sh server` prompts fail or hang on a fresh Debian 13 machine** — Check `apt-get update` succeeded and that the PGDG and Grafana APT repo GPG keys were added correctly — a stale or missing keyring blocks `apt-get install` silently in `-qq` mode. Run the equivalent `apt-get` commands manually without `-qq` to see the real error.
 
-**Certificate errors on the agent (`SSL: CERTIFICATE_VERIFY_FAILED`)**
-The agent's `bundle.zip` is tied to the CA of the server that generated it. If the server was reinstalled (regenerating its CA), all previously issued agent bundles become invalid — re-provision each agent from the dashboard and reinstall with the new bundle.
+- **Certificate errors on the agent (`SSL: CERTIFICATE_VERIFY_FAILED`)** — The agent's `bundle.zip` is tied to the CA of the server that generated it. If the server was reinstalled (regenerating its CA), all previously issued agent bundles become invalid — re-provision each agent from the dashboard and reinstall with the new bundle.
 
 Questions on any part of this — architecture, a specific install step, config field — ask and I'll go deeper on that section specifically.
