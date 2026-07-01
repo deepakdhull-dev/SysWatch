@@ -143,8 +143,8 @@ Path to wheel file: dist/syswatch_server-0.1.0-py3-none-any.whl
 ### Server installation
 
 ```bash
-git clone <repo-url> syswatch
-cd syswatch
+git clone https://github.com/deepakdhull-dev/SysWatch.git
+cd SysWatch
 sudo chmod +x bootstrap-build-env.sh install.sh
 ./bootstrap-build-env.sh    # sets up this Debian 13 machine for building, if needed
 make build                  # generates proto stubs, builds frontend, builds both wheels into dist/
@@ -189,8 +189,8 @@ sudo SERVER_WHEEL=dist/syswatch_server-0.1.0-py3-none-any.whl \
 From the server's dashboard: **Add Agent** -> enter a hostname/agent ID -> download the generated `bundle.zip`. This contains that agent's CA-signed client certificate, key, CA cert, and `agent.yaml` config, pre-filled with the server's address. Copy that `bundle.zip` onto the target machine.
 
 ```bash
-git clone <repo-url> syswatch
-cd syswatch
+git clone https://github.com/deepakdhull-dev/SysWatch.git
+cd SysWatch
 sudo chmod +x bootstrap-build-env.sh install.sh
 ./bootstrap-build-env.sh    # sets up this Debian 13 machine for building, if needed
 make build                  # generates proto stubs, builds both wheels into dist/
